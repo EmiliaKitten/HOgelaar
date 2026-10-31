@@ -113,24 +113,103 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun TodayScreen() {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val events = remember { runCatching { loadTodayEvents(context) } }
-    val dateTitle = remember {
-        LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE d MMMM"))
-    }
+    val events = remember { runCatching { parseIcs(context.assets.open("schedule.ics").bufferedReader().use { it.readText() }) } }
+    var showWeekView by remember { mutableStateOf(false) }
 
-    Scaffold(topBar = { TopAppBar(title = { Text(dateTitle) }) }) { padding ->
-        val list = events.getOrNull()
-        when {
-            list == null -> Message("Couldn't read schedule.ics", padding)
-            list.isEmpty() -> Message("Nothing scheduled today", padding)
-            else -> LazyColumn(
-                modifier = Modifier.padding(padding).fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(list) { EventCard(it) }
+    if (showWeekView) {
+        WeekScreen(
+            events = events,
+            onShowToday = { showWeekView = false }
+        )
+    } else {
+        val dateTitle = remember {
+            LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE d MMMM"))
+        }
+
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text(dateTitle) },
+                    actions = {
+                        TextButton(onClick = { showWeekView = true }) {
+                            Text("Week view")
+                        }
+                    }
+                )
+            }
+        ) { padding ->
+            val list = events.getOrNull()?.filter { it.start.toLocalDate() == LocalDate.now() }
+            when {
+                events.isFailure -> Message("Couldn't read schedule.ics", padding)
+                list.isNullOrEmpty() -> Message("Nothing scheduled today", padding)
+                else -> EventList(list, padding)
             }
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun WeekScreen(events: Result<List<Event>>, onShowToday: () -> Unit) {
+    val weekStart = remember { LocalDate.now().with(DayOfWeek.MONDAY) }
+    val weekEnd = weekStart.plusDays(6)
+    val rangeFormatter = DateTimeFormatter.ofPattern("d MMM")
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text("${weekStart.format(rangeFormatter)} – ${weekEnd.format(rangeFormatter)}")
+                },
+                navigationIcon = {
+                    TextButton(onClick = onShowToday) {
+                        Text("Today")
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        val allEvents = events.getOrNull()
+        if (allEvents == null) {
+            Message("Couldn't read schedule.ics", padding)
+        } else {
+            LazyColumn(
+                modifier = Modifier.padding(padding).fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
+                items((0L..6L).toList()) { dayOffset ->
+                    val date = weekStart.plusDays(dayOffset)
+                    val dayEvents = allEvents.filter { it.start.toLocalDate() == date }
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            date.format(DateTimeFormatter.ofPattern("EEEE d MMMM")),
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        if (dayEvents.isEmpty()) {
+                            Text(
+                                "Nothing scheduled",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            dayEvents.forEach { EventCard(it) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EventList(list: List<Event>, padding: PaddingValues) {
+    LazyColumn(
+        modifier = Modifier.padding(padding).fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        items(list) { EventCard(it) }
     }
 }
 
