@@ -88,6 +88,15 @@ fun parseTime(value: String, params: Map<String, String>): ZonedDateTime? = try 
 
 fun unescape(s: String) = s.replace("\\n", "\n").replace("\\,", ",").replace("\\;", ";").replace("\\\\", "\\")
 
+fun weekStartFor(date: LocalDate): LocalDate {
+    val currentWeekStart = date.with(DayOfWeek.MONDAY)
+    return if (date.dayOfWeek >= DayOfWeek.SATURDAY) {
+        currentWeekStart.plusWeeks(1)
+    } else {
+        currentWeekStart
+    }
+}
+
 // ---------- Loading ----------
 
 fun loadTodayEvents(context: Context, fileName: String = "schedule.ics"): List<Event> {
@@ -151,7 +160,7 @@ fun TodayScreen() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WeekScreen(events: Result<List<Event>>, onShowToday: () -> Unit) {
-    val weekStart = remember { LocalDate.now().with(DayOfWeek.MONDAY) }
+    val weekStart = remember { weekStartFor(LocalDate.now()) }
     val weekEnd = weekStart.plusDays(6)
     val rangeFormatter = DateTimeFormatter.ofPattern("d MMM")
 
